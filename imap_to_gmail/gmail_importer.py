@@ -12,6 +12,21 @@ from googleapiclient.errors import HttpError
 
 
 SCOPES = ["https://mail.google.com/"]
+SYSTEM_LABELS = {
+    "inbox": "INBOX",
+    "sent": "SENT",
+    "draft": "DRAFT",
+    "spam": "SPAM",
+    "trash": "TRASH",
+    "important": "IMPORTANT",
+    "starred": "STARRED",
+    "unread": "UNREAD",
+    "category_personal": "CATEGORY_PERSONAL",
+    "category_social": "CATEGORY_SOCIAL",
+    "category_promotions": "CATEGORY_PROMOTIONS",
+    "category_updates": "CATEGORY_UPDATES",
+    "category_forums": "CATEGORY_FORUMS",
+}
 
 
 class GmailImporter:
@@ -64,8 +79,9 @@ class GmailImporter:
 
         ids: list[str] = []
         for name in label_names:
-            if name in self._label_cache:
-                ids.append(self._label_cache[name])
+            normalized_name = SYSTEM_LABELS.get(name.strip().lower(), name)
+            if normalized_name in self._label_cache:
+                ids.append(self._label_cache[normalized_name])
                 continue
 
             created = (
@@ -74,7 +90,7 @@ class GmailImporter:
                 .create(
                     userId="me",
                     body={
-                        "name": name,
+                        "name": normalized_name,
                         "labelListVisibility": "labelShow",
                         "messageListVisibility": "show",
                     },
@@ -82,7 +98,7 @@ class GmailImporter:
                 .execute()
             )
             label_id = created["id"]
-            self._label_cache[name] = label_id
+            self._label_cache[normalized_name] = label_id
             ids.append(label_id)
         return ids
 
@@ -102,4 +118,3 @@ class GmailImporter:
             return result["id"]
         except HttpError as exc:
             raise RuntimeError(f"Gmail import failed: {exc}") from exc
-

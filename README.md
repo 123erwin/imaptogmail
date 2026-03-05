@@ -33,12 +33,15 @@ Als `GMAIL_ENABLE_IMPORT=false`, wordt deze stap overgeslagen.
 
 Label-opties:
 
-- `GMAIL_LABEL_STRATEGY=env`: labels uit `GMAIL_LABELS` (comma separated).
+- `GMAIL_LABEL_STRATEGY=env`: labels uit `GMAIL_LABELS` (comma separated), bijvoorbeeld `INBOX,Imported`.
 - `GMAIL_LABEL_STRATEGY=folder_mapping`: labels uit `label_mapping.json`.
 
 ```powershell
 python main.py step2
 ```
+
+Tip: je kunt direct importeren vanuit `IMAP_SOURCE_FOLDER` zonder eerst te verplaatsen door `python main.py step2` te draaien en `GMAIL_IMPORT_SOURCE_FOLDER` gelijk te zetten aan die bronmap. `step1` is optioneel en wordt alleen gebruikt als je expliciet wilt verplaatsen naar `IMAP_MOVE_TO_FOLDER`.
+
 
 ## Beide stappen achter elkaar
 
