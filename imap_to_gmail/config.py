@@ -18,6 +18,7 @@ class ImapConfig:
     source_folder: str
     move_to_folder: str | None
     create_target_folder: bool
+    enable_move: bool
     date_from: date | None
     date_to: date | None
 
@@ -85,6 +86,7 @@ def load_config() -> AppConfig:
         source_folder=os.getenv("IMAP_SOURCE_FOLDER", "INBOX"),
         move_to_folder=os.getenv("IMAP_MOVE_TO_FOLDER"),
         create_target_folder=_get_bool("IMAP_CREATE_TARGET_FOLDER", True),
+        enable_move=_get_bool("STEP1_ENABLE_MOVE", True),
         date_from=_get_optional_date("IMAP_DATE_FROM"),
         date_to=_get_optional_date("IMAP_DATE_TO"),
     )

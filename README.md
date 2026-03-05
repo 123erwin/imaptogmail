@@ -19,6 +19,7 @@ pip install -r requirements.txt
 ## Stap 1: IMAP map verplaatsen
 
 Verplaatst berichten van `IMAP_SOURCE_FOLDER` naar `IMAP_MOVE_TO_FOLDER`.
+Als `STEP1_ENABLE_MOVE=false`, wordt deze stap overgeslagen.
 Als `IMAP_CREATE_TARGET_FOLDER=true`, maakt het script de doelmap aan wanneer nodig.
 Als je datumfilters zet, worden alleen die berichten verplaatst.
 

@@ -38,6 +38,10 @@ def _build_date_search_criteria(config: AppConfig) -> list[str]:
 
 
 def run_step1(config: AppConfig) -> None:
+    if not config.imap.enable_move:
+        logger.info("Step 1 skipped: STEP1_ENABLE_MOVE=false.")
+        return
+
     target_folder = config.imap.move_to_folder
     if not target_folder:
         logger.info("Step 1 skipped: IMAP_MOVE_TO_FOLDER not set.")
