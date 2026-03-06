@@ -32,6 +32,13 @@ python main.py step1
 Leest berichten uit `GMAIL_IMPORT_SOURCE_FOLDER` op IMAP en importeert die via `users.messages.import`.
 Als `GMAIL_ENABLE_IMPORT=false`, wordt deze stap overgeslagen.
 
+Om dubbele imports te voorkomen wordt een lokale state-file met eerder geïmporteerde IMAP UID's bijgehouden
+(`GMAIL_STATE_FILE`, standaard `state/imported_uids.json`). Berichten die daar al in staan worden bij volgende
+runs overgeslagen.
+
+Na succesvolle import kan het script berichten direct verplaatsen naar een IMAP map met
+`GMAIL_MOVE_IMPORTED=true` en `GMAIL_IMPORTED_MOVE_TO_FOLDER=NaamVanMap`.
+
 Label-opties:
 
 - `GMAIL_LABEL_STRATEGY=env`: labels uit `GMAIL_LABELS` (comma separated), bijvoorbeeld `INBOX,Imported`.
