@@ -9,6 +9,7 @@ from imap_to_gmail.gmail_importer import GmailImporter
 from imap_to_gmail.imap_client import ImapClient
 from imap_to_gmail.logging_setup import setup_logging
 from imap_to_gmail.mapping import load_label_mapping
+from imap_to_gmail.state_tracker import ImportStateTracker
 
 logger = logging.getLogger("imap_to_gmail")
 
@@ -76,6 +77,13 @@ def run_step2(config: AppConfig) -> None:
         logger.info("Step 2 skipped: GMAIL_ENABLE_IMPORT=false.")
         return
 
+    importer = GmailImporter(config.gmail.credentials_file, config.gmail.token_file)
+    importer.connect()
+
+    labels = _labels_for_folder(config, config.gmail.import_source_folder)
+    label_ids = importer.resolve_label_ids(labels)
+    tracker = ImportStateTracker(config.gmail.state_file)
+
     with ImapClient(config.imap) as client:
         count = client.select_folder(config.gmail.import_source_folder)
         logger.info(
@@ -86,18 +94,47 @@ def run_step2(config: AppConfig) -> None:
         search_criteria = _build_date_search_criteria(config)
         logger.info("Step 2 using IMAP search criteria: %s", " ".join(search_criteria))
         uids = client.list_message_uids(*search_criteria)
-        messages = client.fetch_messages(uids)
+        pending_uids = [
+            uid
+            for uid in uids
+            if not tracker.is_imported(config.gmail.import_source_folder, uid)
+        ]
+        skipped = len(uids) - len(pending_uids)
+        messages = client.fetch_messages(pending_uids)
 
-    labels = _labels_for_folder(config, config.gmail.import_source_folder)
-    importer = GmailImporter(config.gmail.credentials_file, config.gmail.token_file)
-    importer.connect()
-    label_ids = importer.resolve_label_ids(labels)
+        imported = 0
+        successful_uids: list[str] = []
+        for item in messages:
+            importer.import_rfc822(item.raw_rfc822, label_ids)
+            tracker.mark_imported(config.gmail.import_source_folder, item.uid)
+            successful_uids.append(item.uid)
+            imported += 1
 
-    imported = 0
-    for item in messages:
-        importer.import_rfc822(item.raw_rfc822, label_ids)
-        imported += 1
+        moved = 0
+        if config.gmail.move_imported and config.gmail.imported_move_to_folder:
+            if config.gmail.imported_move_to_folder != config.gmail.import_source_folder:
+                client.ensure_folder_exists(config.gmail.imported_move_to_folder)
+                moved = client.move_uids(successful_uids, config.gmail.imported_move_to_folder)
+            else:
+                logger.warning(
+                    "GMAIL_IMPORTED_MOVE_TO_FOLDER equals source folder; skipping move."
+                )
+
     logger.info("Imported %s message(s) into Gmail.", imported)
+    if skipped:
+        logger.info("Skipped %s already imported message(s) based on state file.", skipped)
+    logger.info("State file: %s", config.gmail.state_file)
+    if config.gmail.move_imported and config.gmail.imported_move_to_folder:
+        logger.info(
+            "Moved %s imported message(s) to '%s'.",
+            moved,
+            config.gmail.imported_move_to_folder,
+        )
+    elif config.gmail.move_imported and not config.gmail.imported_move_to_folder:
+        logger.info("Move-on-success is enabled, but no target folder is configured.")
+    else:
+        logger.info("Move-on-success is disabled.")
+
     if labels:
         logger.info("Applied labels: %s", ", ".join(labels))
     else:

@@ -32,6 +32,9 @@ class GmailConfig:
     label_strategy: str
     label_mapping_file: Path
     enable_import: bool
+    state_file: Path
+    move_imported: bool
+    imported_move_to_folder: str | None
 
 
 @dataclass(frozen=True)
@@ -99,6 +102,9 @@ def load_config() -> AppConfig:
         label_strategy=os.getenv("GMAIL_LABEL_STRATEGY", "env").strip().lower(),
         label_mapping_file=Path(os.getenv("LABEL_MAPPING_FILE", "label_mapping.json")),
         enable_import=_get_bool("GMAIL_ENABLE_IMPORT", True),
+        state_file=Path(os.getenv("GMAIL_STATE_FILE", "state/imported_uids.json")),
+        move_imported=_get_bool("GMAIL_MOVE_IMPORTED", True),
+        imported_move_to_folder=os.getenv("GMAIL_IMPORTED_MOVE_TO_FOLDER"),
     )
 
     if gmail.label_strategy not in {"env", "folder_mapping"}:
