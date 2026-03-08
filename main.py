@@ -86,18 +86,29 @@ def run_step2(config: AppConfig) -> None:
 
     with ImapClient(config.imap) as client:
         count = client.select_folder(config.gmail.import_source_folder)
+        uid_validity = client.current_uid_validity
         logger.info(
             "Selected import folder '%s' (%s messages).",
             config.gmail.import_source_folder,
             count,
         )
+        if uid_validity:
+            logger.info(
+                "Using IMAP UIDVALIDITY '%s' for state tracking.", uid_validity
+            )
+        else:
+            logger.warning(
+                "Could not read IMAP UIDVALIDITY; state tracking will fall back to plain UIDs."
+            )
         search_criteria = _build_date_search_criteria(config)
         logger.info("Step 2 using IMAP search criteria: %s", " ".join(search_criteria))
         uids = client.list_message_uids(*search_criteria)
         pending_uids = [
             uid
             for uid in uids
-            if not tracker.is_imported(config.gmail.import_source_folder, uid)
+            if not tracker.is_imported(
+                config.gmail.import_source_folder, uid, uid_validity
+            )
         ]
         skipped = len(uids) - len(pending_uids)
         messages = client.fetch_messages(pending_uids)
@@ -106,7 +117,9 @@ def run_step2(config: AppConfig) -> None:
         successful_uids: list[str] = []
         for item in messages:
             importer.import_rfc822(item.raw_rfc822, label_ids)
-            tracker.mark_imported(config.gmail.import_source_folder, item.uid)
+            tracker.mark_imported(
+                config.gmail.import_source_folder, item.uid, uid_validity
+            )
             successful_uids.append(item.uid)
             imported += 1
 

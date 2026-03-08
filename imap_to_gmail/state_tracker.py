@@ -26,14 +26,26 @@ class ImportStateTracker:
                 data[folder] = clean_uids
         return data
 
-    def is_imported(self, folder: str, uid: str) -> bool:
-        return uid in set(self._data.get(folder, []))
+    @staticmethod
+    def _build_state_id(uid: str, uid_validity: str | None) -> str:
+        if uid_validity:
+            return f"{uid_validity}:{uid}"
+        return uid
 
-    def mark_imported(self, folder: str, uid: str) -> None:
+    def is_imported(self, folder: str, uid: str, uid_validity: str | None = None) -> bool:
+        known_ids = set(self._data.get(folder, []))
+        state_id = self._build_state_id(uid, uid_validity)
+        # Backward compatibility: old state files stored plain UID values.
+        return state_id in known_ids or uid in known_ids
+
+    def mark_imported(
+        self, folder: str, uid: str, uid_validity: str | None = None
+    ) -> None:
         folder_uids = self._data.setdefault(folder, [])
-        if uid in folder_uids:
+        state_id = self._build_state_id(uid, uid_validity)
+        if state_id in folder_uids:
             return
-        folder_uids.append(uid)
+        folder_uids.append(state_id)
         self._save()
 
     def _save(self) -> None:

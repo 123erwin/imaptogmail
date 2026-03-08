@@ -17,6 +17,7 @@ class ImapClient:
     def __init__(self, config: ImapConfig) -> None:
         self._config = config
         self._conn: imaplib.IMAP4 | imaplib.IMAP4_SSL | None = None
+        self._current_uid_validity: str | None = None
 
     def __enter__(self) -> "ImapClient":
         self.connect()
@@ -43,6 +44,7 @@ class ImapClient:
             self._conn.logout()
         finally:
             self._conn = None
+            self._current_uid_validity = None
 
     @property
     def conn(self) -> imaplib.IMAP4 | imaplib.IMAP4_SSL:
@@ -64,7 +66,27 @@ class ImapClient:
         status, data = self.conn.select(f'"{folder_name}"')
         if status != "OK":
             raise RuntimeError(f"Failed to select folder: {folder_name}")
+        self._current_uid_validity = self._read_uid_validity()
         return int(data[0].decode() if data and data[0] else 0)
+
+    @property
+    def current_uid_validity(self) -> str | None:
+        return self._current_uid_validity
+
+    def _read_uid_validity(self) -> str | None:
+        _, data = self.conn.response("UIDVALIDITY")
+        if not data:
+            return None
+
+        raw = data[0]
+        if isinstance(raw, bytes):
+            value = raw.decode(errors="ignore").strip()
+        elif isinstance(raw, str):
+            value = raw.strip()
+        else:
+            value = str(raw).strip()
+
+        return value or None
 
     def list_message_uids(self, *criteria: str) -> list[str]:
         if not criteria:
