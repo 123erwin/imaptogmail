@@ -18,6 +18,7 @@ class ImapClient:
         self._config = config
         self._conn: imaplib.IMAP4 | imaplib.IMAP4_SSL | None = None
         self._current_uid_validity: str | None = None
+        self._selected_folder: str | None = None
 
     def __enter__(self) -> "ImapClient":
         self.connect()
@@ -42,9 +43,13 @@ class ImapClient:
             return
         try:
             self._conn.logout()
+        except (imaplib.IMAP4.error, OSError):
+            # Connection may already be closed/reset by the server.
+            pass
         finally:
             self._conn = None
             self._current_uid_validity = None
+            self._selected_folder = None
 
     @property
     def conn(self) -> imaplib.IMAP4 | imaplib.IMAP4_SSL:
@@ -66,6 +71,7 @@ class ImapClient:
         status, data = self.conn.select(f'"{folder_name}"')
         if status != "OK":
             raise RuntimeError(f"Failed to select folder: {folder_name}")
+        self._selected_folder = folder_name
         self._current_uid_validity = self._read_uid_validity()
         return int(data[0].decode() if data and data[0] else 0)
 
@@ -123,3 +129,17 @@ class ImapClient:
         if moved > 0:
             self.conn.expunge()
         return moved
+
+    def reconnect_if_needed(self) -> None:
+        """Re-open IMAP connection when server closed an idle session."""
+        try:
+            self.conn.noop()
+            return
+        except (imaplib.IMAP4.abort, imaplib.IMAP4.error, OSError):
+            pass
+
+        selected_folder = self._selected_folder
+        self.close()
+        self.connect()
+        if selected_folder:
+            self.select_folder(selected_folder)

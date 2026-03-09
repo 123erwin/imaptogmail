@@ -110,7 +110,9 @@ def run_step2(config: AppConfig) -> None:
                 config.gmail.import_source_folder, uid, uid_validity
             )
         ]
-        skipped = len(uids) - len(pending_uids)
+        pending_uid_set = set(pending_uids)
+        already_imported_uids = [uid for uid in uids if uid not in pending_uid_set]
+        skipped = len(already_imported_uids)
         messages = client.fetch_messages(pending_uids)
 
         imported = 0
@@ -126,8 +128,13 @@ def run_step2(config: AppConfig) -> None:
         moved = 0
         if config.gmail.move_imported and config.gmail.imported_move_to_folder:
             if config.gmail.imported_move_to_folder != config.gmail.import_source_folder:
+                # Gmail import can take long enough for some IMAP servers to drop idle sessions.
+                client.reconnect_if_needed()
                 client.ensure_folder_exists(config.gmail.imported_move_to_folder)
-                moved = client.move_uids(successful_uids, config.gmail.imported_move_to_folder)
+                move_candidates = [*successful_uids, *already_imported_uids]
+                moved = client.move_uids(
+                    move_candidates, config.gmail.imported_move_to_folder
+                )
             else:
                 logger.warning(
                     "GMAIL_IMPORTED_MOVE_TO_FOLDER equals source folder; skipping move."
