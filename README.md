@@ -32,6 +32,11 @@ python main.py step1
 Leest berichten uit een of meerdere IMAP mappen uit `GMAIL_IMPORT_SOURCE_FOLDER` en importeert die via `users.messages.import`.
 Als `GMAIL_ENABLE_IMPORT=false`, wordt deze stap overgeslagen.
 
+Parallel import:
+
+- Zet `GMAIL_IMPORT_WORKERS` hoger dan `1` om meerdere parallelle import-workers voor stap 2 te gebruiken.
+- Start conservatief met `2` of `3` en verhoog alleen als je IMAP/Gmail quotas dit toelaten.
+
 Om dubbele imports te voorkomen wordt een lokale state-file met eerder geïmporteerde IMAP identifiers bijgehouden
 (`GMAIL_STATE_FILE`, standaard `state/imported_uids.json`). Het formaat is `UIDVALIDITY:UID` per map (bijv.
 `123456789:248`), zodat identifiers ook uniek blijven als een IMAP server UIDs reset. Berichten die daar al in

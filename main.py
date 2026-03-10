@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 import logging
+from threading import Lock
 
 from imap_to_gmail.config import AppConfig, load_config
 from imap_to_gmail.gmail_importer import GmailImporter
@@ -87,6 +89,26 @@ def run_step1(config: AppConfig) -> None:
         )
 
 
+def _import_chunk(
+    credentials_file,
+    token_file,
+    chunk,
+    label_ids: list[str],
+) -> tuple[list[str], list[tuple[str, str]]]:
+    importer = GmailImporter(credentials_file, token_file)
+    importer.connect()
+    succeeded: list[str] = []
+    failed: list[tuple[str, str]] = []
+    for item in chunk:
+        try:
+            importer.import_rfc822(item.raw_rfc822, label_ids)
+        except RuntimeError as exc:
+            failed.append((item.uid, str(exc)))
+            continue
+        succeeded.append(item.uid)
+    return succeeded, failed
+
+
 def run_step2(config: AppConfig) -> None:
     if not config.gmail.enable_import:
         logger.info("Step 2 skipped: GMAIL_ENABLE_IMPORT=false.")
@@ -96,6 +118,7 @@ def run_step2(config: AppConfig) -> None:
     importer.connect()
 
     tracker = ImportStateTracker(config.gmail.state_file)
+    tracker_lock = Lock()
     total_imported = 0
     total_skipped = 0
     total_moved = 0
@@ -154,31 +177,84 @@ def run_step2(config: AppConfig) -> None:
             imported = 0
             failed = 0
             successful_uids: list[str] = []
-            for index, item in enumerate(messages, start=1):
-                try:
-                    importer.import_rfc822(item.raw_rfc822, label_ids)
-                except RuntimeError as exc:
-                    failed += 1
-                    logger.warning(
-                        "Folder '%s': failed to import UID %s; skipping this message. Error: %s",
-                        source_folder,
-                        item.uid,
-                        exc,
-                    )
-                    continue
 
-                tracker.mark_imported(source_folder, item.uid, uid_validity)
-                successful_uids.append(item.uid)
-                imported += 1
-                if index % 10 == 0 or index == total_to_import:
-                    logger.info(
-                        "Folder '%s': Gmail import progress %s/%s (ok=%s, failed=%s).",
-                        source_folder,
-                        index,
-                        total_to_import,
-                        imported,
-                        failed,
-                    )
+            if config.gmail.import_workers <= 1 or total_to_import <= 1:
+                for index, item in enumerate(messages, start=1):
+                    try:
+                        importer.import_rfc822(item.raw_rfc822, label_ids)
+                    except RuntimeError as exc:
+                        failed += 1
+                        logger.warning(
+                            "Folder '%s': failed to import UID %s; skipping this message. Error: %s",
+                            source_folder,
+                            item.uid,
+                            exc,
+                        )
+                        continue
+
+                    tracker.mark_imported(source_folder, item.uid, uid_validity)
+                    successful_uids.append(item.uid)
+                    imported += 1
+                    if index % 10 == 0 or index == total_to_import:
+                        logger.info(
+                            "Folder '%s': Gmail import progress %s/%s (ok=%s, failed=%s).",
+                            source_folder,
+                            index,
+                            total_to_import,
+                            imported,
+                            failed,
+                        )
+            else:
+                logger.info(
+                    "Folder '%s': importing with %s parallel worker(s).",
+                    source_folder,
+                    config.gmail.import_workers,
+                )
+                worker_count = min(config.gmail.import_workers, total_to_import)
+                chunk_size = max(1, (total_to_import + worker_count - 1) // worker_count)
+                chunks = [messages[i : i + chunk_size] for i in range(0, total_to_import, chunk_size)]
+
+                with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                    futures = [
+                        executor.submit(
+                            _import_chunk,
+                            config.gmail.credentials_file,
+                            config.gmail.token_file,
+                            chunk,
+                            label_ids,
+                        )
+                        for chunk in chunks
+                    ]
+
+                    processed = 0
+                    for future in as_completed(futures):
+                        succeeded_uids, failed_items = future.result()
+                        processed += len(succeeded_uids) + len(failed_items)
+
+                        for uid in succeeded_uids:
+                            with tracker_lock:
+                                tracker.mark_imported(source_folder, uid, uid_validity)
+                            successful_uids.append(uid)
+                            imported += 1
+
+                        for uid, error_message in failed_items:
+                            failed += 1
+                            logger.warning(
+                                "Folder '%s': failed to import UID %s; skipping this message. Error: %s",
+                                source_folder,
+                                uid,
+                                error_message,
+                            )
+
+                        if processed % 10 == 0 or processed == total_to_import:
+                            logger.info(
+                                "Folder '%s': Gmail import progress %s/%s (ok=%s, failed=%s).",
+                                source_folder,
+                                processed,
+                                total_to_import,
+                                imported,
+                                failed,
+                            )
 
             moved = 0
             if config.gmail.move_imported and config.gmail.imported_move_to_folder:
