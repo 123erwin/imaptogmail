@@ -27,7 +27,7 @@ class ImapConfig:
 class GmailConfig:
     credentials_file: Path
     token_file: Path
-    import_source_folder: str
+    import_source_folders: list[str]
     labels: list[str]
     label_strategy: str
     label_mapping_file: Path
@@ -97,18 +97,33 @@ def load_config() -> AppConfig:
     gmail = GmailConfig(
         credentials_file=Path(os.getenv("GMAIL_CREDENTIALS_FILE", "credentials.json")),
         token_file=Path(os.getenv("GMAIL_TOKEN_FILE", "token.json")),
-        import_source_folder=os.getenv("GMAIL_IMPORT_SOURCE_FOLDER", "INBOX"),
+        import_source_folders=_split_csv(
+            os.getenv("GMAIL_IMPORT_SOURCE_FOLDER", "INBOX")
+        ),
         labels=_split_csv(os.getenv("GMAIL_LABELS")),
         label_strategy=os.getenv("GMAIL_LABEL_STRATEGY", "env").strip().lower(),
         label_mapping_file=Path(os.getenv("LABEL_MAPPING_FILE", "label_mapping.json")),
         enable_import=_get_bool("GMAIL_ENABLE_IMPORT", True),
         state_file=Path(os.getenv("GMAIL_STATE_FILE", "state/imported_uids.json")),
         move_imported=_get_bool("GMAIL_MOVE_IMPORTED", True),
-        imported_move_to_folder=os.getenv("GMAIL_IMPORTED_MOVE_TO_FOLDER"),
+        imported_move_to_folder=os.getenv("GMAIL_IMPORTED_MOVE_TO_FOLDER", "").strip()
+        or None,
     )
 
     if gmail.label_strategy not in {"env", "folder_mapping"}:
         raise ValueError("GMAIL_LABEL_STRATEGY must be 'env' or 'folder_mapping'")
+
+    if not gmail.import_source_folders:
+        raise ValueError(
+            "GMAIL_IMPORT_SOURCE_FOLDER must contain at least one folder name"
+        )
+
+    if gmail.imported_move_to_folder and (
+        "/" in gmail.imported_move_to_folder or "." in gmail.imported_move_to_folder
+    ):
+        raise ValueError(
+            "GMAIL_IMPORTED_MOVE_TO_FOLDER must be a single folder name without '/' or '.'"
+        )
 
     if imap.date_from and imap.date_to and imap.date_from > imap.date_to:
         raise ValueError("IMAP_DATE_FROM cannot be later than IMAP_DATE_TO")

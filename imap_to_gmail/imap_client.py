@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import imaplib
+import logging
 from typing import Iterable
 
 from .config import ImapConfig
+
+logger = logging.getLogger("imap_to_gmail")
 
 
 @dataclass
@@ -105,27 +108,74 @@ class ImapClient:
         return data[0].decode().split()
 
     def fetch_messages(self, uids: Iterable[str]) -> list[ImapMessage]:
+        uid_list = list(uids)
+        total = len(uid_list)
+        folder = self._selected_folder or "<unknown>"
+        if total:
+            logger.info(
+                "Fetching %s message(s) from IMAP folder '%s'...", total, folder
+            )
+
         result: list[ImapMessage] = []
-        for uid in uids:
+        for index, uid in enumerate(uid_list, start=1):
             status, data = self.conn.uid("FETCH", uid, "(RFC822)")
             if status != "OK" or not data or not data[0]:
+                if index % 25 == 0 or index == total:
+                    logger.info(
+                        "IMAP fetch progress for '%s': %s/%s checked, %s fetched.",
+                        folder,
+                        index,
+                        total,
+                        len(result),
+                    )
                 continue
             payload = data[0]
             if isinstance(payload, tuple) and len(payload) >= 2:
                 raw_bytes = payload[1]
                 if isinstance(raw_bytes, bytes):
                     result.append(ImapMessage(uid=uid, raw_rfc822=raw_bytes))
+            if index % 25 == 0 or index == total:
+                logger.info(
+                    "IMAP fetch progress for '%s': %s/%s checked, %s fetched.",
+                    folder,
+                    index,
+                    total,
+                    len(result),
+                )
         return result
 
     def move_uids(self, uids: Iterable[str], target_folder: str) -> int:
+        uid_list = list(uids)
+        total = len(uid_list)
+        if total:
+            logger.info(
+                "Moving %s message(s) to '%s'...", total, target_folder
+            )
+
         moved = 0
-        for uid in uids:
+        for index, uid in enumerate(uid_list, start=1):
             status, _ = self.conn.uid("COPY", uid, f'"{target_folder}"')
             if status != "OK":
+                if index % 25 == 0 or index == total:
+                    logger.info(
+                        "IMAP move progress to '%s': %s/%s processed, %s moved.",
+                        target_folder,
+                        index,
+                        total,
+                        moved,
+                    )
                 continue
             status, _ = self.conn.uid("STORE", uid, "+FLAGS.SILENT", "(\\Deleted)")
             if status == "OK":
                 moved += 1
+            if index % 25 == 0 or index == total:
+                logger.info(
+                    "IMAP move progress to '%s': %s/%s processed, %s moved.",
+                    target_folder,
+                    index,
+                    total,
+                    moved,
+                )
         if moved > 0:
             self.conn.expunge()
         return moved

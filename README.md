@@ -29,7 +29,7 @@ python main.py step1
 
 ## Stap 2: Importeren naar Gmail
 
-Leest berichten uit `GMAIL_IMPORT_SOURCE_FOLDER` op IMAP en importeert die via `users.messages.import`.
+Leest berichten uit een of meerdere IMAP mappen uit `GMAIL_IMPORT_SOURCE_FOLDER` en importeert die via `users.messages.import`.
 Als `GMAIL_ENABLE_IMPORT=false`, wordt deze stap overgeslagen.
 
 Om dubbele imports te voorkomen wordt een lokale state-file met eerder geïmporteerde IMAP identifiers bijgehouden
@@ -37,8 +37,13 @@ Om dubbele imports te voorkomen wordt een lokale state-file met eerder geïmport
 `123456789:248`), zodat identifiers ook uniek blijven als een IMAP server UIDs reset. Berichten die daar al in
 staan worden bij volgende runs overgeslagen.
 
-Na succesvolle import kan het script berichten direct verplaatsen naar een IMAP map met
+Na succesvolle import kan het script berichten direct verplaatsen met
 `GMAIL_MOVE_IMPORTED=true` en `GMAIL_IMPORTED_MOVE_TO_FOLDER=NaamVanMap`.
+De map uit `GMAIL_IMPORTED_MOVE_TO_FOLDER` moet alleen een foldernaam zijn (geen pad) en wordt als subfolder aangemaakt onder elke bronmap.
+Voorbeeld:
+- `GMAIL_IMPORT_SOURCE_FOLDER=INBOX.2024.social`
+- `GMAIL_IMPORTED_MOVE_TO_FOLDER=verwerkt`
+- doelfolder wordt dan `INBOX.2024.social.verwerkt` (automatisch aangemaakt als die nog niet bestaat)
 
 Label-opties:
 
