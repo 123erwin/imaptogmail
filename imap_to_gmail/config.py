@@ -35,6 +35,10 @@ class GmailConfig:
     state_file: Path
     move_imported: bool
     imported_move_to_folder: str | None
+    import_workers: int
+    fetch_batch_size: int
+    operation_retries: int
+    retry_delay_seconds: float
 
 
 @dataclass(frozen=True)
@@ -108,6 +112,10 @@ def load_config() -> AppConfig:
         move_imported=_get_bool("GMAIL_MOVE_IMPORTED", True),
         imported_move_to_folder=os.getenv("GMAIL_IMPORTED_MOVE_TO_FOLDER", "").strip()
         or None,
+        import_workers=max(1, int(os.getenv("GMAIL_IMPORT_WORKERS", "1"))),
+        fetch_batch_size=max(1, int(os.getenv("GMAIL_FETCH_BATCH_SIZE", "50"))),
+        operation_retries=max(1, int(os.getenv("GMAIL_OPERATION_RETRIES", "3"))),
+        retry_delay_seconds=max(0.1, float(os.getenv("GMAIL_RETRY_DELAY_SECONDS", "2"))),
     )
 
     if gmail.label_strategy not in {"env", "folder_mapping"}:
